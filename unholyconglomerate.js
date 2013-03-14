@@ -186,6 +186,8 @@ FloorTile.prototype = new Tile();
 FloorTile.prototype.draw = function(x,y,brightness){
 	if(this.unit){
 		this.unit.draw(brightness);
+	}else if(this.items.length > 0){
+		this.items[0].draw(x,y,brightness);
 	}else{
 		Tile.prototype.draw.call(this,x,y,brightness);
 	}
@@ -249,6 +251,10 @@ Actor.prototype.act = function(){
 };
 //Get the speed of the actor
 Actor.prototype.getSpeed = function(){ return this._speed; };
+//Get the current tile from the map
+Actor.prototype.getTile = function(){
+	return Game.map[this._x][this._y];
+};
 //Attempt to move actor in desired direction
 Actor.prototype.move = function(x,y){
 	//Get new position
@@ -279,7 +285,7 @@ Actor.prototype.move = function(x,y){
 
 	//Remove self from previous tile and add self to new tile
 	tile.unit = this;
-	Game.map[this._x][this._y].unit = null;
+	this.getTile().unit = null;
 
 	//Do the move!
 	this._x = newX;
@@ -300,6 +306,7 @@ var LimbedCreature = function(x,y){
 	//Defaults
 	this._maxLimbs = 4; // Maximum number of limbs allowed
 	this._limbs = []; // Array of attached limbs
+	this._description = "abomination";
 	
 	//Base torso stats
 	this._attack = 0;
@@ -338,6 +345,10 @@ LimbedCreature.prototype.removeLimb = function(limbIndex){
 	this._defense -= limb.defense;
 	this._damage -= limb.damage;
 	this.speed -= limb.speed;
+
+	//Drop limb on the ground
+	limb.hp = limb.hpBase;
+	this.getTile().items.push(limb);
 
 	//Remove limb from list
 	this._limbs.splice(limbIndex,1);
@@ -395,7 +406,7 @@ LimbedCreature.prototype.applyDamage = function(damage){
 			//TODO: drop limbs / items
 			//How are limbs dropped if limbs are destroyed first?
 
-			Game.map[this._x][this._y].unit = null;
+			this.getTile().unit = null;
 			Game.engine.removeActor(this);
 			Game.redraw();
 		}
@@ -432,6 +443,19 @@ Player.prototype.act = function(){
 	Game.engine.lock();
 	window.addEventListener("keydown",this);
 };
+Player.prototype.move = function(x,y){
+	if(!Actor.prototype.move.call(this, x,y))
+		return false;
+
+	var tile = this.getTile();
+	//Check if there are items on the tile
+	if(tile.items.length > 0){
+		for(var i = 0; i < tile.items.length;i++){
+			console.log('there is a',tile.items[i].description,'here.');
+		}
+	}
+	return true;
+}
 //Handle keyboard input
 Player.prototype.handleEvent = function(e){
 	switch(e.keyCode){
@@ -492,6 +516,17 @@ Player.prototype.handleEvent = function(e){
 	return true;
 };
 
+// Item root class
+var Item = function(){
+	this._character = '*';
+	this._color = [255,255,100];
+	this.description = "amorphous object";
+}
+Item.prototype.draw = function(x,y,brightness){
+	Game.display.draw(x, y,this._character, 
+		ROT.Color.toHex(ROT.Color.interpolate(this._color,[0,0,0],brightness)));
+};
+
 // Limb class
 var Limb = function(params){
 	this.attack = 0;
@@ -499,9 +534,12 @@ var Limb = function(params){
 	this.damage = 0;
 	this.speed = 0;
 	this.hp = 5;
+	this._character = '/';
 	this.description = "non-descript appendage";
 	//Apply custom params
 	for(var param in params){
 		this[param] = params[param];
 	}
+	this.hpBase = this.hp;
 };
+Limb.prototype = new Item();
