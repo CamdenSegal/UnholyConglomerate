@@ -23,7 +23,7 @@ var Game = {
 
 		//Generate and draw the map
 		this._generateMap();
-		this._drawVisibleMap(40,12,14);
+		this.redraw();
 
 		//Start the game!
 		this.engine.start();
@@ -52,15 +52,66 @@ var Game = {
 		digger.create(digCallback.bind(this));
 
 		//Create the player
-		this._createPlayer();
+		this.player = this._createActor(Player);
+		var monster = this._createActor(LimbedCreature);
+		monster.addLimb(new Limb({hp:20}));
+		monster = this._createActor(LimbedCreature);
+		monster.addLimb(new Limb({hp:20}));
+		monster = this._createActor(LimbedCreature);
+		monster.addLimb(new Limb({hp:20}));
 	},
 
-	_createPlayer: function() {
-		//Place player at the middle of the map
-		this.player = new Player(40,12);
+	_getEmptyTiles: function(){
+		var emptyTiles =[];
+		var tile = null;
+		for(var x in this.map){
+			for(var y in this.map[x]){
+				tile = this.map[x][y];
+				if(tile.walkable && !tile.unit && tile.items.length == 0){
+					emptyTiles.push(x+','+y);
+				}
+			}
+		}
+		return emptyTiles;
+	},
+
+	_createActor: function(actor, x, y) {
+		if(!x || !y){
+			var emptyTiles = this._getEmptyTiles();
+			if(!emptyTiles)
+				return false;
+			var index = Math.floor(ROT.RNG.getUniform() * emptyTiles.length);
+			var parts = emptyTiles[index].split(',');
+			x = parseInt(parts[0]);
+			y = parseInt(parts[1]);
+		}
+
+		//If tile doesnt exist return false
+		if(!(x in Game.map))
+			return false;
+		if(!(y in Game.map[x]))
+			return false;
+
+		var tile = Game.map[x][y];
+
+		//If tile isn't walkable return false
+		if(!tile.walkable)
+			return false;
+
+		//If tile has a creature in it do something else
+		if(tile.unit != null)
+			return false;
+
+		//Place actor at the specified location
+		var actor = new actor(x,y);
+
+		//Add actor to map tile
+		this.map[x][y].unit = actor;
 
 		//Add the player to the engine
-		this.engine.addActor(this.player);
+		this.engine.addActor(actor);
+
+		return actor;
 	},
 
 	_drawVisibleMap: function(x,y,r){
@@ -77,9 +128,6 @@ var Game = {
 
 		//Run the FOV Calculations
 		fov.compute(x,y,r,fovCallback.bind(this));
-
-		//Draw the player after the map
-		this.player.draw();
 	},
 
 	//Return if light passes through the specified tile
@@ -104,7 +152,7 @@ var Tile = function(params){
 	this.description = "a point in space"; //Description (not used yet)
 	this.lightPasses = true; //Does light pass through this block?
 	this.walkable = true; //Can actors stand here?
-	
+
 	//Apply custom params
 	for(var param in params){
 		this[param] = params[param];
@@ -126,6 +174,8 @@ var FloorTile = function(params){
 	this.character = '.';
 	this.fg = ROT.Color.randomize([220,240,220],[5,30,5]); // slight color variation
 	this.description = "open floor";
+	this.items = [];
+	this.unit = null;
 
 	//Apply customs params
 	for(var param in params){
@@ -133,6 +183,13 @@ var FloorTile = function(params){
 	}
 };
 FloorTile.prototype = new Tile();
+FloorTile.prototype.draw = function(x,y,brightness){
+	if(this.unit){
+		this.unit.draw(brightness);
+	}else{
+		Tile.prototype.draw.call(this,x,y,brightness);
+	}
+}
 
 var WallTile = function(params){
 	//Call tile contstructer
@@ -162,12 +219,16 @@ var Actor = function(x,y){
 	//Defauts
 	this._speed = 100; //Determines turn order
 	this._character = 'M'; //Default diplay M for Meany Monster
+	this._description = 'actor'; //Default name of actor
 	this._color = [255,100,100]; //Red is scary right?
 	this._queue = []; //Queue of actions to do before recomputing
 };
 //Draw this actor on the map
-Actor.prototype.draw = function(){
-	Game.display.draw(this._x, this._y,this._character, ROT.Color.toHex(this._color));
+Actor.prototype.draw = function(brightness){
+	if(!brightness)
+		brightness = 0;
+	Game.display.draw(this._x, this._y,this._character, 
+		ROT.Color.toHex(ROT.Color.interpolate(this._color,[0,0,0],brightness)));
 };
 //Execute a turn
 Actor.prototype.act = function(){
@@ -200,9 +261,25 @@ Actor.prototype.move = function(x,y){
 	if(!(newY in Game.map[newX]))
 		return false;
 
+	var tile = Game.map[newX][newY];
+
 	//If tile isn't walkable return false
-	if(!Game.map[newX][newY].walkable)
+	if(!tile.walkable)
 		return false;
+
+	//If tile has a creature in it do something else
+	if(tile.unit != null){
+		if(this.doAttack){
+			this.doAttack(tile.unit);
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+	//Remove self from previous tile and add self to new tile
+	tile.unit = this;
+	Game.map[this._x][this._y].unit = null;
 
 	//Do the move!
 	this._x = newX;
@@ -214,6 +291,8 @@ Actor.prototype.move = function(x,y){
 	return true;
 };
 
+
+//Child of actor for actors with limbs
 var LimbedCreature = function(x,y){
 	//Call parent constructor
 	Actor.call(this,x,y);
@@ -221,18 +300,107 @@ var LimbedCreature = function(x,y){
 	//Defaults
 	this._maxLimbs = 4; // Maximum number of limbs allowed
 	this._limbs = []; // Array of attached limbs
+	
+	//Base torso stats
+	this._attack = 0;
+	this._defense = 40;
+	this._damage = 3;
+	this._hp = 20;
+	this._hpBase = 20;
 };
 LimbedCreature.prototype = new Actor();
 //Add a new limb to the creature. Gross
 LimbedCreature.prototype.addLimb = function(newLimb){
+	//If has a place to attach limb
 	if(this._limbs.length < this._maxLimbs){
+		//Add the limb to the list of limbs
 		this._limbs.push(newLimb);
+		//Add the stats of the limb
+		this._attack += newLimb.attack;
+		this._defense += newLimb.defense;
+		this._speed += newLimb.speed;
+		this._damage += newLimb.damage;
+
 		return newLimb;
 	}
 	return false; // FAILED!
 };
+//Remove a limb from the creature. Really gross
+LimbedCreature.prototype.removeLimb = function(limbIndex){
+	//Make sure limbIndex is valid
+	if(!(limbIndex in this._limbs))
+		return false;
 
+	var limb = this._limbs[limbIndex];
+	
+	//Remove limb stat modifiers
+	this._attack -= limb.attack;
+	this._defense -= limb.defense;
+	this._damage -= limb.damage;
+	this.speed -= limb.speed;
 
+	//Remove limb from list
+	this._limbs.splice(limbIndex,1);
+};
+LimbedCreature.prototype.attackRoll = function(){
+	// 1d100 + base attack stat
+	return this._attack + ROT.RNG.getPercentage();
+};
+LimbedCreature.prototype.damageRoll = function(){
+	return ROT.RNG.getNormal(this._damage, this._damage/4);
+};
+LimbedCreature.prototype.getDefense = function(){
+	// static defense stat
+	return this._defense;
+};
+LimbedCreature.prototype.doAttack = function(defender){
+	console.log('the',this._description,'attacks the',defender._description);
+	if(this.attackRoll() < defender.getDefense()){
+		console.log('the',this._description,'missed');
+		return false; // Attack misses
+	}else{
+		console.log('the',this._description,'hit!')
+		defender.applyDamage(this.damageRoll());
+	}
+};
+//Apply damage to creature
+LimbedCreature.prototype.applyDamage = function(damage){
+	if(this._limbs.length > 0){
+		//Choose a limb to damage randomly
+		var limbIndex = Math.floor(ROT.RNG.getUniform() * this._limbs.length);
+		var limb = this._limbs[limbIndex];
+
+		if(limb.hp > damage){
+			//Limb takes damage but isn't destroyed
+			limb.hp -= damage;
+			console.log('the',this._description+"'s",limb.description,"is hurt!");
+		}else{
+			//Limb is destroyed by attack
+			//Get remaining damage
+			damage -= limb.hp;
+			console.log('the',this._description+"'s",limb.description,"is lopped off!");
+			//Remove limb
+			this.removeLimb(limbIndex);
+			//Rollover remaining damage
+			this.applyDamage(damage);
+		}
+	}else{
+		//No limbs! Damage the torso
+		console.log('the',this._description, "is hit in it's vulnerable core");
+		this._hp -= damage;
+		if(this._hp <= 0){
+			//Creature dies
+			console.log('the',this._description, "has died");
+
+			//TODO: drop limbs / items
+			//How are limbs dropped if limbs are destroyed first?
+
+			Game.map[this._x][this._y].unit = null;
+			Game.engine.removeActor(this);
+			Game.redraw();
+		}
+	}
+};
 
 
 //THE PLAYER
@@ -243,14 +411,15 @@ var Player = function(x,y) {
 	//Setup Display
 	this._character = '@';
 	this._color = [100,255,100];
+	this._description = "hero";
 
 	//Add Human Legs
-	this.addLimb(new Limb({speed:50,hp:10}));
-	this.addLimb(new Limb({speed:50,hp:10}));
+	this.addLimb(new Limb({speed:50,hp:10, description: "human leg"}));
+	this.addLimb(new Limb({speed:50,hp:10, description: "human leg"}));
 
 	//Add Human Arms
-	this.addLimb(new Limb({attack:10,holder:true}));
-	this.addLimb(new Limb({attack:10,holder:true}));
+	this.addLimb(new Limb({attack:10,damage:5, description: "human arm"})); //Left Arm
+	this.addLimb(new Limb({attack:20,damage:10,defense:20, description: "human sword arm"})); //Sword Arm
 };
 Player.prototype = new LimbedCreature();
 //Player turn logic
@@ -324,6 +493,15 @@ Player.prototype.handleEvent = function(e){
 };
 
 // Limb class
-var Limb = function(modifiers){
-	this.modifiers = modifiers ? modifiers : {};
+var Limb = function(params){
+	this.attack = 0;
+	this.defense = 0;
+	this.damage = 0;
+	this.speed = 0;
+	this.hp = 5;
+	this.description = "non-descript appendage";
+	//Apply custom params
+	for(var param in params){
+		this[param] = params[param];
+	}
 };
