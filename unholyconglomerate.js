@@ -412,6 +412,13 @@ LimbedCreature.prototype.applyDamage = function(damage){
 		}
 	}
 };
+LimbedCreature.prototype.describe = function(){
+	var result = "A "+this._description+". It has "+this._limbs.length+" limbs. ";
+	for(var i = 0; i < this._limbs.length; i++){
+		result += "It has a "+this._limbs[i].description+". ";
+	}
+	return result;
+}
 
 
 //THE PLAYER
@@ -419,7 +426,7 @@ var Player = function(x,y) {
 	//Inherit from Limbed Creature
 	LimbedCreature.call(this,x,y);
 
-	//Setup Display
+	//Setup Display6
 	this._character = '@';
 	this._color = [100,255,100];
 	this._description = "hero";
@@ -504,17 +511,54 @@ Player.prototype.handleEvent = function(e){
 			if(!this.move(1,1))
 				return false;
 			break;
+		//Other controls
+		case ROT.VK_NUMPAD5:
+		case ROT.VK_P:
+			//pickup item
+			this.pickup();
+			return;
+		case ROT.VK_PERIOD:
+			//Wait 1 turn
+			break;
+		case ROT.VK_SLASH:
+			//Look around
+			console.log(this.describe());
+			break;
 		default:
 			return false; // No action mapped to event.
 	}
-
-	//Stop listening till next turn
-	window.removeEventListener("keydown",this);
-
-	//Resume engine
-	Game.engine.unlock();
+	this.endTurn();
 	return true;
 };
+Player.prototype.endTurn = function(){
+	//Stop listening till next turn
+	window.removeEventListener("keydown",this);
+	//Resume engine
+	Game.engine.unlock();
+}
+//Pickup item from current tile
+Player.prototype.pickup = function(){
+	var items = this.getTile().items;
+	if(items.length == 0)
+		return false;
+	if(items.length == 1){
+		//Pickup the single item
+		var item = items.pop();
+		console.log("picking up",item.description);
+		if(item instanceof Limb){
+			if(!this.addLimb(item)){
+				console.log('the',item.description,"won't attach");
+				items.push(item);
+				return false;
+			}
+			console.log('your new',item.description,'feels ready');
+		}
+		this.endTurn();
+		return true;
+	}else{
+		//Ask which item to pick up
+	}
+}
 
 // Item root class
 var Item = function(){
