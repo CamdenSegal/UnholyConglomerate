@@ -53,12 +53,24 @@ var Game = {
 
 		//Create the player
 		this.player = this._createActor(Player);
-		var monster = this._createActor(LimbedCreature);
-		monster.addLimb(new Limb({hp:20}));
-		monster = this._createActor(LimbedCreature);
-		monster.addLimb(new Limb({hp:20}));
-		monster = this._createActor(LimbedCreature);
-		monster.addLimb(new Limb({hp:20}));
+
+		var monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
+		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
+		monster.addLimb(new Limb(Limbs.goblinArm));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
+
+		monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
+		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
+		monster.addLimb(new Limb(Limbs.goblinArm));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
+
+		monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
+		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
+		monster.addLimb(new Limb(Limbs.goblinArm));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
+		monster.addLimb(new Limb(Limbs.goblinLeg));
 	},
 
 	_getEmptyTiles: function(){
@@ -67,7 +79,7 @@ var Game = {
 		for(var x in this.map){
 			for(var y in this.map[x]){
 				tile = this.map[x][y];
-				if(tile.walkable && !tile.unit && tile.items.length == 0){
+				if(tile.walkable && !tile.unit && tile.items.length === 0){
 					emptyTiles.push(x+','+y);
 				}
 			}
@@ -75,15 +87,15 @@ var Game = {
 		return emptyTiles;
 	},
 
-	_createActor: function(actor, x, y) {
+	_createActor: function(actorClass, x, y, options) {
 		if(!x || !y){
 			var emptyTiles = this._getEmptyTiles();
 			if(!emptyTiles)
 				return false;
 			var index = Math.floor(ROT.RNG.getUniform() * emptyTiles.length);
 			var parts = emptyTiles[index].split(',');
-			x = parseInt(parts[0]);
-			y = parseInt(parts[1]);
+			x = parseInt(parts[0],10);
+			y = parseInt(parts[1],10);
 		}
 
 		//If tile doesnt exist return false
@@ -99,11 +111,11 @@ var Game = {
 			return false;
 
 		//If tile has a creature in it do something else
-		if(tile.unit != null)
+		if(tile.unit !== null)
 			return false;
 
 		//Place actor at the specified location
-		var actor = new actor(x,y);
+		var actor = new actorClass(x,y,options);
 
 		//Add actor to map tile
 		this.map[x][y].unit = actor;
@@ -140,7 +152,45 @@ var Game = {
 	//Redraw the display.
 	redraw: function(){
 		this._drawVisibleMap(this.player._x,this.player._y,14);
+	},
+
+	//Do graphic prompt
+	prompt: function(options, curChoice, callback){
+		this.display.clear();
+		for(var i = 0; i < options.length; i++){
+			this.display.drawText(5,i+1,""+options[i]);
+		}
+		this.display.draw(3,curChoice+1,'>');
+		var promptHandler = function(e){
+			switch(e.keyCode){
+				case ROT.VK_NUMPAD8:
+				case ROT.VK_UP:
+				case ROT.VK_K:
+					if(curChoice-1 > 0){
+						window.removeEventListener('keydown',promptHandler);
+						Game.prompt(options,curChoice-1,callback);
+					}
+					return;
+				case ROT.VK_NUMPAD2:
+				case ROT.VK_DOWN:
+				case ROT.VK_J:
+					if(curChoice+1 < options.length){
+						window.removeEventListener('keydown',promptHandler);
+						Game.prompt(options,curChoice+1,callback);
+					}
+					return;
+				case ROT.VK_RETURN:
+					window.removeEventListener('keydown',promptHandler);
+					callback(curChoice);
+					return;
+				default:
+					return;
+			}
+		};
+		window.addEventListener('keydown',promptHandler);
 	}
+
+
 };
 
 //Tile classes
@@ -191,7 +241,7 @@ FloorTile.prototype.draw = function(x,y,brightness){
 	}else{
 		Tile.prototype.draw.call(this,x,y,brightness);
 	}
-}
+};
 
 var WallTile = function(params){
 	//Call tile contstructer
@@ -229,7 +279,7 @@ var Actor = function(x,y){
 Actor.prototype.draw = function(brightness){
 	if(!brightness)
 		brightness = 0;
-	Game.display.draw(this._x, this._y,this._character, 
+	Game.display.draw(this._x, this._y,this._character,
 		ROT.Color.toHex(ROT.Color.interpolate(this._color,[0,0,0],brightness)));
 };
 //Execute a turn
@@ -274,7 +324,7 @@ Actor.prototype.move = function(x,y){
 		return false;
 
 	//If tile has a creature in it do something else
-	if(tile.unit != null){
+	if(tile.unit !== null){
 		if(this.doAttack){
 			this.doAttack(tile.unit);
 			return true;
@@ -299,7 +349,7 @@ Actor.prototype.move = function(x,y){
 
 
 //Child of actor for actors with limbs
-var LimbedCreature = function(x,y){
+var LimbedCreature = function(x,y,params){
 	//Call parent constructor
 	Actor.call(this,x,y);
 
@@ -307,13 +357,18 @@ var LimbedCreature = function(x,y){
 	this._maxLimbs = 4; // Maximum number of limbs allowed
 	this._limbs = []; // Array of attached limbs
 	this._description = "abomination";
-	
+
 	//Base torso stats
 	this._attack = 0;
 	this._defense = 40;
 	this._damage = 3;
 	this._hp = 20;
 	this._hpBase = 20;
+
+	//Apply customs params
+	for(var param in params){
+		this['_'+param] = params[param];
+	}
 };
 LimbedCreature.prototype = new Actor();
 //Add a new limb to the creature. Gross
@@ -339,7 +394,7 @@ LimbedCreature.prototype.removeLimb = function(limbIndex){
 		return false;
 
 	var limb = this._limbs[limbIndex];
-	
+
 	//Remove limb stat modifiers
 	this._attack -= limb.attack;
 	this._defense -= limb.defense;
@@ -370,7 +425,7 @@ LimbedCreature.prototype.doAttack = function(defender){
 		console.log('the',this._description,'missed');
 		return false; // Attack misses
 	}else{
-		console.log('the',this._description,'hit!')
+		console.log('the',this._description,'hit!');
 		defender.applyDamage(this.damageRoll());
 	}
 };
@@ -403,8 +458,8 @@ LimbedCreature.prototype.applyDamage = function(damage){
 			//Creature dies
 			console.log('the',this._description, "has died");
 
-			//TODO: drop limbs / items
-			//How are limbs dropped if limbs are destroyed first?
+			//TODO: drop items
+			this.getTile().items.push(new StaticItem(this._description+" corpse"));
 
 			this.getTile().unit = null;
 			Game.engine.removeActor(this);
@@ -412,32 +467,33 @@ LimbedCreature.prototype.applyDamage = function(damage){
 		}
 	}
 };
+//Return a human readable description including descriptions of all limbs.
 LimbedCreature.prototype.describe = function(){
 	var result = "A "+this._description+". It has "+this._limbs.length+" limbs. ";
 	for(var i = 0; i < this._limbs.length; i++){
 		result += "It has a "+this._limbs[i].description+". ";
 	}
 	return result;
-}
+};
 
 
 //THE PLAYER
 var Player = function(x,y) {
 	//Inherit from Limbed Creature
 	LimbedCreature.call(this,x,y);
-
+	this._maxLimbs = 20;
 	//Setup Display6
 	this._character = '@';
 	this._color = [100,255,100];
 	this._description = "hero";
 
 	//Add Human Legs
-	this.addLimb(new Limb({speed:50,hp:10, description: "human leg"}));
-	this.addLimb(new Limb({speed:50,hp:10, description: "human leg"}));
+	this.addLimb(new Limb(Limbs.humanLeg));
+	this.addLimb(new Limb(Limbs.humanLeg));
 
 	//Add Human Arms
-	this.addLimb(new Limb({attack:10,damage:5, description: "human arm"})); //Left Arm
-	this.addLimb(new Limb({attack:20,damage:10,defense:20, description: "human sword arm"})); //Sword Arm
+	this.addLimb(new Limb(Limbs.humanArm)); //Left Arm
+	this.addLimb(new Limb(Limbs.humanSwordArm)); //Sword Arm
 };
 Player.prototype = new LimbedCreature();
 //Player turn logic
@@ -462,7 +518,7 @@ Player.prototype.move = function(x,y){
 		}
 	}
 	return true;
-}
+};
 //Handle keyboard input
 Player.prototype.handleEvent = function(e){
 	switch(e.keyCode){
@@ -535,15 +591,22 @@ Player.prototype.endTurn = function(){
 	window.removeEventListener("keydown",this);
 	//Resume engine
 	Game.engine.unlock();
-}
+};
 //Pickup item from current tile
 Player.prototype.pickup = function(){
 	var items = this.getTile().items;
-	if(items.length == 0)
+	if(items.length === 0)
 		return false;
-	if(items.length == 1){
+	if(items.length === 1){
 		//Pickup the single item
 		var item = items.pop();
+
+		if(!item.pickup()){
+			console.log("cant lift",item.description);
+			items.push(item);
+			return false;
+		}
+
 		console.log("picking up",item.description);
 		if(item instanceof Limb){
 			if(!this.addLimb(item)){
@@ -557,27 +620,67 @@ Player.prototype.pickup = function(){
 		return true;
 	}else{
 		//Ask which item to pick up
+		window.removeEventListener("keydown",this);
+		var descriptions = [];
+		for(var i = 0; i < items.length; i++){
+			descriptions.push(items[i].description);
+		}
+		descriptions.push("Cancel");
+		var callback = function(chosen){
+			Game.redraw();
+			if(chosen >= items.length){
+				window.addEventListener("keydown",this);
+				return false;
+			}
+			var item = items.splice(chosen,1)[0];
+
+			if(!item.pickup()){
+				console.log("cant lift",item.description);
+				window.addEventListener("keydown",this);
+				items.push(item);
+				return false;
+			}
+
+			console.log("picking up",item.description);
+
+			if(item instanceof Limb){
+				if(!this.addLimb(item)){
+					console.log('the',item.description,"won't attach");
+					items.push(item);
+					window.addEventListener("keydown",this);
+					return false;
+				}
+				console.log('your new',item.description,'feels ready');
+			}
+			this.endTurn();
+			return true;
+		};
+		Game.prompt(descriptions,0,callback.bind(this));
 	}
-}
+};
 
 // Item root class
 var Item = function(){
 	this._character = '*';
 	this._color = [255,255,100];
 	this.description = "amorphous object";
-}
+};
 Item.prototype.draw = function(x,y,brightness){
-	Game.display.draw(x, y,this._character, 
+	Game.display.draw(x, y,this._character,
 		ROT.Color.toHex(ROT.Color.interpolate(this._color,[0,0,0],brightness)));
+};
+Item.prototype.pickup = function(){
+	return true;
 };
 
 // Limb class
 var Limb = function(params){
+	Item.call(this);
 	this.attack = 0;
 	this.defense = 0;
 	this.damage = 0;
 	this.speed = 0;
-	this.hp = 5;
+	this.hp = 8;
 	this._character = '/';
 	this.description = "non-descript appendage";
 	//Apply custom params
@@ -587,3 +690,28 @@ var Limb = function(params){
 	this.hpBase = this.hp;
 };
 Limb.prototype = new Item();
+
+//List of predefined limbs
+var Limbs = {
+	// Human Limbs
+	humanArm: {attack:10,damage:5, description: "human arm"},
+	humanSwordArm: {attack:20,damage:10,defense:20, description: "human arm holding a sword"},
+	humanLeg: {speed:50,hp:15, description: "human leg"},
+
+	// Rodent Limbs
+	ratLeg: {attack:2, damage: 1, speed: 20, hp: 3, description: "rat leg"},
+
+	// Small Monster Limbs
+	goblinArm: {attack: 7, damage: 5, defense: 10, description: "goblin arm"},
+	goblinDaggerArm: {attack: 14, damage: 7, defense: 15, description: "goblin arm holding a dagger"},
+	goblinLeg: {speed: 40, hp: 13, description: "goblin leg"}
+};
+
+var StaticItem = function(description, character, color){
+	Item.call(this);
+	this.description = description;
+	this._character = (character ? character : 'x');
+	this._color = (color ? color : [80,80,80]);
+};
+StaticItem.prototype = new Item();
+StaticItem.prototype.pickup = function(){ return false; };
