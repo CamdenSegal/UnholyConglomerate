@@ -8,10 +8,13 @@ var Game = {
 	display: null,
 	map: {},
 	player: null,
+	messages: [],
+	displayHeight: 30,
+	displayWidth: 80,
 
 	init: function() {
 		//Setup display
-		this.display = new ROT.Display();
+		this.display = new ROT.Display({width: this.displayWidth, height: this.displayHeight});
 		document.body.appendChild(this.display.getContainer());
 
 		//Remove loading text
@@ -152,6 +155,7 @@ var Game = {
 	//Redraw the display.
 	redraw: function(){
 		this._drawVisibleMap(this.player._x,this.player._y,14);
+		this._drawMessages();
 	},
 
 	//Do graphic prompt
@@ -188,9 +192,32 @@ var Game = {
 			}
 		};
 		window.addEventListener('keydown',promptHandler);
+	},
+
+	//Show a message on the screen
+	addMessage: function(message){
+		this.messages.push( message );
+		console.log(message);
+		if(this.messages.length > this.displayHeight/3)
+			this.messages.shift();
+		this.redraw();
+	},
+
+	//Clear all messages
+	clearMessages: function(){
+		this.messages = [];
+		this.redraw();
+	},
+
+	_drawMessages: function(){
+		var msgY = 0;
+		if(this.player._y < this.displayHeight/2)
+			msgY = this.displayHeight - this.messages.length;
+		for(var i = 0; i < this.messages.length; i++){
+			this.display.drawText(0,msgY,this.messages[i]);
+			msgY+=1;
+		}
 	}
-
-
 };
 
 //Tile classes
@@ -420,12 +447,12 @@ LimbedCreature.prototype.getDefense = function(){
 	return this._defense;
 };
 LimbedCreature.prototype.doAttack = function(defender){
-	console.log('the',this._description,'attacks the',defender._description);
+	Game.addMessage('the '+this._description+' attacks the '+defender._description);
 	if(this.attackRoll() < defender.getDefense()){
-		console.log('the',this._description,'missed');
+		Game.addMessage('the '+this._description+' missed');
 		return false; // Attack misses
 	}else{
-		console.log('the',this._description,'hit!');
+		Game.addMessage('the '+this._description+' hit!');
 		defender.applyDamage(this.damageRoll());
 	}
 };
@@ -439,12 +466,12 @@ LimbedCreature.prototype.applyDamage = function(damage){
 		if(limb.hp > damage){
 			//Limb takes damage but isn't destroyed
 			limb.hp -= damage;
-			console.log('the',this._description+"'s",limb.description,"is hurt!");
+			Game.addMessage('the '+this._description+"'s "+limb.description+" is hurt!");
 		}else{
 			//Limb is destroyed by attack
 			//Get remaining damage
 			damage -= limb.hp;
-			console.log('the',this._description+"'s",limb.description,"is lopped off!");
+			Game.addMessage('the '+this._description+"'s "+limb.description+" is lopped off!");
 			//Remove limb
 			this.removeLimb(limbIndex);
 			//Rollover remaining damage
@@ -452,11 +479,11 @@ LimbedCreature.prototype.applyDamage = function(damage){
 		}
 	}else{
 		//No limbs! Damage the torso
-		console.log('the',this._description, "is hit in it's vulnerable core");
+		Game.addMessage('the '+this._description+ " is hit in it's vulnerable core");
 		this._hp -= damage;
 		if(this._hp <= 0){
 			//Creature dies
-			console.log('the',this._description, "has died");
+			Game.addMessage('the '+this._description+ " has died");
 
 			//TODO: drop items
 			this.getTile().items.push(new StaticItem(this._description+" corpse"));
@@ -514,7 +541,7 @@ Player.prototype.move = function(x,y){
 	//Check if there are items on the tile
 	if(tile.items.length > 0){
 		for(var i = 0; i < tile.items.length;i++){
-			console.log('there is a',tile.items[i].description,'here.');
+			Game.addMessage('there is a '+tile.items[i].description+' here.');
 		}
 	}
 	return true;
@@ -526,59 +553,70 @@ Player.prototype.handleEvent = function(e){
 		case ROT.VK_NUMPAD8:
 		case ROT.VK_UP:
 		case ROT.VK_K:
+			Game.clearMessages();
 			if(!this.move(0,-1))
 				return false; // Move failed
 			break; // Move succeded
 		case ROT.VK_NUMPAD2:
 		case ROT.VK_DOWN:
 		case ROT.VK_J:
+			Game.clearMessages();
 			if(!this.move(0,1))
 				return false;
 			break;
 		case ROT.VK_NUMPAD4:
 		case ROT.VK_LEFT:
 		case ROT.VK_H:
+			Game.clearMessages();
 			if(!this.move(-1,0))
 				return false;
 			break;
 		case ROT.VK_NUMPAD6:
 		case ROT.VK_RIGHT:
 		case ROT.VK_L:
+			Game.clearMessages();
 			if(!this.move(1,0))
 				return false;
 			break;
 		case ROT.VK_NUMPAD7:
 		case ROT.VK_Y:
+			Game.clearMessages();
 			if(!this.move(-1,-1))
 				return false;
 			break;
 		case ROT.VK_NUMPAD9:
 		case ROT.VK_U:
+			Game.clearMessages();
 			if(!this.move(1,-1))
 				return false;
 			break;
 		case ROT.VK_NUMPAD1:
 		case ROT.VK_B:
+			Game.clearMessages();
 			if(!this.move(-1,1))
 				return false;
 			break;
 		case ROT.VK_NUMPAD3:
 		case ROT.VK_N:
+			Game.clearMessages();
 			if(!this.move(1,1))
 				return false;
 			break;
 		//Other controls
 		case ROT.VK_NUMPAD5:
 		case ROT.VK_P:
+			Game.clearMessages();
 			//pickup item
 			this.pickup();
 			return;
 		case ROT.VK_PERIOD:
+			Game.clearMessages();
 			//Wait 1 turn
 			break;
 		case ROT.VK_SLASH:
+			Game.clearMessages();
 			//Look around
-			console.log(this.describe());
+			Game.addMessage(this.describe());
 			break;
 		default:
 			return false; // No action mapped to event.
@@ -602,19 +640,19 @@ Player.prototype.pickup = function(){
 		var item = items.pop();
 
 		if(!item.pickup()){
-			console.log("cant lift",item.description);
+			Game.addMessage("cant lift "+item.description);
 			items.push(item);
 			return false;
 		}
 
-		console.log("picking up",item.description);
+		Game.addMessage("picking up "+item.description);
 		if(item instanceof Limb){
 			if(!this.addLimb(item)){
-				console.log('the',item.description,"won't attach");
+				Game.addMessage('the '+item.description+" won't attach");
 				items.push(item);
 				return false;
 			}
-			console.log('your new',item.description,'feels ready');
+			Game.addMessage('your new '+item.description+' feels ready');
 		}
 		this.endTurn();
 		return true;
@@ -635,22 +673,22 @@ Player.prototype.pickup = function(){
 			var item = items.splice(chosen,1)[0];
 
 			if(!item.pickup()){
-				console.log("cant lift",item.description);
+				Game.addMessage("cant lift "+item.description);
 				window.addEventListener("keydown",this);
 				items.push(item);
 				return false;
 			}
 
-			console.log("picking up",item.description);
+			Game.addMessage("picking up "+item.description);
 
 			if(item instanceof Limb){
 				if(!this.addLimb(item)){
-					console.log('the',item.description,"won't attach");
+					Game.addMessage('the '+item.description+" won't attach");
 					items.push(item);
 					window.addEventListener("keydown",this);
 					return false;
 				}
-				console.log('your new',item.description,'feels ready');
+				Game.addMessage('your new '+item.description+' feels ready');
 			}
 			this.endTurn();
 			return true;
