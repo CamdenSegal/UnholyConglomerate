@@ -481,7 +481,7 @@ LimbedCreature.prototype.describe = function(){
 var Player = function(x,y) {
 	//Inherit from Limbed Creature
 	LimbedCreature.call(this,x,y);
-	this._maxLimbs = 20;
+	
 	//Setup Display6
 	this._character = '@';
 	this._color = [100,255,100];
