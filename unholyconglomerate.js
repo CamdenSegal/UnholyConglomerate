@@ -152,18 +152,39 @@ var Game = {
 		return (y in this.map[x]) ? this.map[x][y].lightPasses : false;
 	},
 
+	playerVisible: function(x,y,r){
+		//Initialize a fov object
+		var fov = new ROT.FOV.PreciseShadowcasting(this._lightPasses.bind(this));
+
+		var seen = false;
+		
+		var fovCallback = function(x,y,d,visibility){
+			//Draw the tile with brightness based on distance from player
+			if(this.map[x][y].unit == this.player){
+				seen = [x,y];
+			}
+		};
+
+		//Run the FOV Calculations
+		fov.compute(x,y,r,fovCallback.bind(this));
+		
+		return seen;
+	},
+
 	//Redraw the display.
 	redraw: function(){
-		this._drawVisibleMap(this.player._x,this.player._y,14);
+		this._drawVisibleMap(this.player.getX(),this.player.getY(),14);
 		this._drawMessages();
 	},
 
 	//Do graphic prompt
-	prompt: function(options, curChoice, callback){
+	prompt: function(options, curChoice, callback, title){
 		this.display.clear();
 		for(var i = 0; i < options.length; i++){
 			this.display.drawText(5,i+1,""+options[i]);
 		}
+		if(title)
+			this.display.drawText(3,0,title);
 		this.display.draw(3,curChoice+1,'>');
 		var promptHandler = function(e){
 			switch(e.keyCode){
@@ -172,7 +193,7 @@ var Game = {
 				case ROT.VK_K:
 					if(curChoice-1 > 0){
 						window.removeEventListener('keydown',promptHandler);
-						Game.prompt(options,curChoice-1,callback);
+						Game.prompt(options,curChoice-1,callback,title);
 					}
 					return;
 				case ROT.VK_NUMPAD2:
@@ -180,7 +201,7 @@ var Game = {
 				case ROT.VK_J:
 					if(curChoice+1 < options.length){
 						window.removeEventListener('keydown',promptHandler);
-						Game.prompt(options,curChoice+1,callback);
+						Game.prompt(options,curChoice+1,callback,title);
 					}
 					return;
 				case ROT.VK_RETURN:
@@ -201,6 +222,8 @@ var Game = {
 		if(this.messages.length > this.displayHeight/3)
 			this.messages.shift();
 		this.redraw();
+		if(message.length > this.displayWidth-1)
+			this.addMessage(message.slice(this.displayWidth-1));
 	},
 
 	//Clear all messages
@@ -211,7 +234,7 @@ var Game = {
 
 	_drawMessages: function(){
 		var msgY = 0;
-		if(this.player._y < this.displayHeight/2)
+		if(this.player.getY() < this.displayHeight/2)
 			msgY = this.displayHeight - this.messages.length;
 		for(var i = 0; i < this.messages.length; i++){
 			this.display.drawText(0,msgY,this.messages[i]);
@@ -323,6 +346,7 @@ Actor.prototype.act = function(){
 				return true;
 		}
 	}
+
 	//No action done yet!
 	return false;
 };
@@ -332,8 +356,11 @@ Actor.prototype.getSpeed = function(){ return this._speed; };
 Actor.prototype.getTile = function(){
 	return Game.map[this._x][this._y];
 };
+//Position Getters
+Actor.prototype.getX = function(){ return this._x;}
+Actor.prototype.getY = function(){ return this._y;}
 //Attempt to move actor in desired direction
-Actor.prototype.move = function(x,y){
+Actor.prototype.move = function(x,y,noAttack){
 	//Get new position
 	var newX = this._x + x;
 	var newY = this._y + y;
@@ -352,7 +379,7 @@ Actor.prototype.move = function(x,y){
 
 	//If tile has a creature in it do something else
 	if(tile.unit !== null){
-		if(this.doAttack){
+		if(this.doAttack && !noAttack){
 			this.doAttack(tile.unit);
 			return true;
 		}else{
@@ -374,6 +401,110 @@ Actor.prototype.move = function(x,y){
 	return true;
 };
 
+//List of common states
+var States = {
+	//Drunken walk
+	randomWalk: function(actor){
+		var direction = ROT.DIRS[4][Math.floor(ROT.RNG.getUniform()*4)];
+		actor.move(direction[0],direction[1],true);
+	},
+
+	//A* Route to last seen location
+	chase: function(actor, seen){
+		var x = seen[0];
+		var y = seen[1];
+		var path = [];
+
+		var passableCallback = function(x,y) {
+			return Game.map[x][y].walkable;
+		};
+
+		var pathCallback = function(x,y) {
+			path.push([x,y]);
+		};
+
+		var astar = new ROT.Path.AStar(x,y, passableCallback, {topology:4});
+		astar.compute(actor.getX(), actor.getY(), pathCallback);
+
+		path.shift();
+
+		x = path[0][0] - actor.getX();
+		y = path[0][1] - actor.getY();
+
+		//If next to player attack it!
+		if(path.length == 1){
+			actor.move(x,y);
+		}else{ //Otherwise avoid attacking other monsters
+			actor.move(x,y,true);
+		}
+	}
+};
+
+//Brain class, used for determining actor behavior
+var Brain = function(idleState, activeState, sense){
+	// Actions to do while idle
+	this._idleState = idleState;
+
+	// Actions to do while active (player in sight)
+	this._activeState = activeState;
+
+	// Determines if active
+	this._sense = sense;
+};
+Brain.prototype.act = function(actor){
+	var seen = this._sense.look(actor.getX(), actor.getY());
+	if(seen){
+		console.log(actor._description,"active",seen);
+		this._activeState(actor,seen);
+	}else{
+		console.log(actor._description,"inactive",seen);
+		this._idleState(actor);
+	}
+};
+
+var Sense = function(){
+	//Last seen at location.
+	this.seen = [0,0];
+
+	//How long ago was seen.
+	this.lastSeen = 100;
+
+	//How long of memory
+	this.maxLastSeen = 10;
+};
+Sense.prototype.look = function(x,y){
+	//If last seen was beyond memory return false
+	if(this.lastSeen >= this.maxLastSeen)
+		return false;
+
+	//Increment memory
+	this.lastSeen++;
+
+	//Return last seen location
+	return this.seen;
+};
+
+var Sight = function(distance){
+	//Inherit from Sense
+	Sense.call(this);
+
+	//Max view range
+	this.viewRange = distance;
+};
+Sight.prototype = new Sense();
+Sight.prototype.look = function(x,y){
+	//Look for the player
+	var tSeen = Game.playerVisible(x,y,this.viewRange)
+
+	//If the player is seen remember where and when
+	if(tSeen){
+		this.seen = tSeen;
+		this.lastSeen = 0;
+	}
+
+	//Alert the senses!
+	return Sense.prototype.look.call(this,x,y);
+};
 
 //Child of actor for actors with limbs
 var LimbedCreature = function(x,y,params){
@@ -392,12 +523,27 @@ var LimbedCreature = function(x,y,params){
 	this._hp = 20;
 	this._hpBase = 20;
 
+	//AI!
+	this._brain = new Brain(States.randomWalk, States.chase, new Sight(10));
+
 	//Apply customs params
 	for(var param in params){
 		this['_'+param] = params[param];
 	}
 };
 LimbedCreature.prototype = new Actor();
+//Act!
+LimbedCreature.prototype.act = function(){
+	//Check if actor has preassigned move
+	if(Actor.prototype.act.call(this))
+		return true;
+
+	if(this._brain)
+		return this._brain.act(this);
+
+	//No action done yet!
+	return false;
+};
 //Add a new limb to the creature. Gross
 LimbedCreature.prototype.addLimb = function(newLimb){
 	//If has a place to attach limb
@@ -508,7 +654,10 @@ LimbedCreature.prototype.describe = function(){
 var Player = function(x,y) {
 	//Inherit from Limbed Creature
 	LimbedCreature.call(this,x,y);
-	
+
+	//Disable AI
+	this._brain = null;
+
 	//Setup Display6
 	this._character = '@';
 	this._color = [100,255,100];
@@ -526,7 +675,7 @@ Player.prototype = new LimbedCreature();
 //Player turn logic
 Player.prototype.act = function(){
 	//Check if actor has preassigned move
-	if(Actor.prototype.act.call(this))
+	if(LimbedCreature.prototype.act.call(this))
 		return true;
 
 	//Lock the engine and wait for keyboard input
@@ -693,7 +842,7 @@ Player.prototype.pickup = function(){
 			this.endTurn();
 			return true;
 		};
-		Game.prompt(descriptions,0,callback.bind(this));
+		Game.prompt(descriptions,0,callback.bind(this),"PICKUP:");
 	}
 };
 
@@ -753,3 +902,4 @@ var StaticItem = function(description, character, color){
 };
 StaticItem.prototype = new Item();
 StaticItem.prototype.pickup = function(){ return false; };
+
