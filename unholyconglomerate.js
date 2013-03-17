@@ -574,7 +574,7 @@ LimbedCreature.prototype.removeLimb = function(limbIndex){
 	this._damage -= limb.damage;
 	this.speed -= limb.speed;
 
-	if(!this.noDrop){
+	if(!this._noDrop){
 		//Drop limb on the ground
 		limb.hp = limb.hpBase;
 		this.getTile().items.push(limb);
