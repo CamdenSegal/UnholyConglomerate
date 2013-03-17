@@ -574,9 +574,11 @@ LimbedCreature.prototype.removeLimb = function(limbIndex){
 	this._damage -= limb.damage;
 	this.speed -= limb.speed;
 
-	//Drop limb on the ground
-	limb.hp = limb.hpBase;
-	this.getTile().items.push(limb);
+	if(!this.noDrop){
+		//Drop limb on the ground
+		limb.hp = limb.hpBase;
+		this.getTile().items.push(limb);
+	}
 
 	//Remove limb from list
 	this._limbs.splice(limbIndex,1);
@@ -657,6 +659,9 @@ var Player = function(x,y) {
 
 	//Disable AI
 	this._brain = null;
+
+	//Doesn't Drop Limbs
+	this._noDrop = true;
 
 	//Setup Display6
 	this._character = '@';
