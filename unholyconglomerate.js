@@ -15,7 +15,7 @@ var Game = {
 	init: function() {
 		//Setup display
 		this.display = new ROT.Display({width: this.displayWidth, height: this.displayHeight});
-		document.body.appendChild(this.display.getContainer());
+		document.getElementById('gameHere').appendChild(this.display.getContainer());
 
 		//Remove loading text
 		var loadingText = document.getElementById("loading");
