@@ -57,23 +57,12 @@ var Game = {
 		//Create the player
 		this.player = this._createActor(Player);
 
-		var monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
-		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
-		monster.addLimb(new Limb(Limbs.goblinArm));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
-
-		monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
-		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
-		monster.addLimb(new Limb(Limbs.goblinArm));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
-
-		monster = this._createActor(LimbedCreature,null,null,{description: 'goblin'});
-		monster.addLimb(new Limb(Limbs.goblinDaggerArm));
-		monster.addLimb(new Limb(Limbs.goblinArm));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
-		monster.addLimb(new Limb(Limbs.goblinLeg));
+		this._generateMonster(20);
+		this._generateMonster(20);
+		this._generateMonster(20);
+		this._generateMonster(20);
+		this._generateMonster(20);
+		this._generateMonster(20);
 	},
 
 	_getEmptyTiles: function(){
@@ -91,6 +80,13 @@ var Game = {
 	},
 
 	_createActor: function(actorClass, x, y, options) {
+		//Place actor at the specified location
+		var actor = new actorClass(x,y,options);
+
+		return this._placeActor(actor,x,y);
+	},
+
+	_placeActor: function(actor, x,y){
 		if(!x || !y){
 			var emptyTiles = this._getEmptyTiles();
 			if(!emptyTiles)
@@ -117,8 +113,7 @@ var Game = {
 		if(tile.unit !== null)
 			return false;
 
-		//Place actor at the specified location
-		var actor = new actorClass(x,y,options);
+		actor.setPos(x,y);
 
 		//Add actor to map tile
 		this.map[x][y].unit = actor;
@@ -127,6 +122,31 @@ var Game = {
 		this.engine.addActor(actor);
 
 		return actor;
+	},
+
+	_generateMonster: function(corruption){
+		var monsterStats = Monsters[Math.floor(ROT.RNG.getUniform() * Monsters.length)];
+		
+		//Pull out limb stats and dont pass to constructor
+		var limbs = monsterStats.limbs;
+		monsterStats.limbs = [];
+		
+		//Create the monster
+		var monster = new LimbedCreature(0,0,monsterStats);
+
+		for(var i = 0; i < limbs.length; i++){
+			var limb = limbs[i];
+			if(ROT.RNG.getPercentage() < corruption){
+				var limbKeys = Object.keys(Limbs);
+				limb = Limbs[limbKeys[Math.floor(ROT.RNG.getUniform() * limbKeys.length)]];//random mutated limb
+				console.log(limb);
+			}
+			if(limb instanceof Array)
+				limb = limb[Math.floor(ROT.RNG.getUniform() * limb.length)];
+			monster.addLimb(new Limb(limb));
+		}
+
+		this._placeActor(monster);
 	},
 
 	_drawVisibleMap: function(x,y,r){
@@ -356,9 +376,13 @@ Actor.prototype.getSpeed = function(){ return this._speed; };
 Actor.prototype.getTile = function(){
 	return Game.map[this._x][this._y];
 };
-//Position Getters
+//Position Getters and Setter
 Actor.prototype.getX = function(){ return this._x;}
 Actor.prototype.getY = function(){ return this._y;}
+Actor.prototype.setPos = function(x,y){
+	this._x = x; 
+	this._y = y;
+}
 //Attempt to move actor in desired direction
 Actor.prototype.move = function(x,y,noAttack){
 	//Get new position
@@ -525,7 +549,7 @@ var LimbedCreature = function(x,y,params){
 	this._defense = 40;
 	this._damage = 3;
 	this._hp = 20;
-	this._hpBase = 20;
+	
 
 	//AI!
 	this._brain = new Brain(States.randomWalk, States.chase, new Sight(10));
@@ -535,6 +559,7 @@ var LimbedCreature = function(x,y,params){
 		this['_'+param] = params[param];
 	}
 
+	this._hpBase = this._hp;
 	this._character = this._description[0];
 };
 LimbedCreature.prototype = new Actor();
@@ -925,9 +950,9 @@ var Limbs = {
 	ratLeg: {attack:2, damage: 1, speed: 20, hp: 3, description: "leg", species: "rat"},
 
 	// Beast Limbs
-	dogLeg: {attack: 2, damage: 3, speed: 70, hp: 5, description: "leg", species: "dog"},
-	wolfLeg: {attack: 4, damage: 4, speed: 80, hp: 6, description: "leg", species: "wolf"},
-	bearLeg: {attack: 14, damage: 9, speed: 40, hp: 12, description: "leg", species: "bear"},
+	dogLeg: {attack: 2, damage: 3, speed: 60, hp: 5, description: "leg", species: "dog"},
+	wolfLeg: {attack: 2, damage: 4, speed: 65, hp: 6, description: "leg", species: "wolf"},
+	bearLeg: {attack: 14, damage: 12, speed: 40, hp: 12, description: "leg", species: "bear"},
 
 	// Small Monster Limbs
 	goblinArm: {attack: 7, damage: 5, defense: 10, description: "arm", species: "goblin"},
@@ -950,6 +975,81 @@ var Limbs = {
 	trollClubArm: {attack: 18, damage: 20,hp: 15, description: "arm holding a club", species: "troll"},
 	trollLeg: {speed:20,hp:30, description: "leg", species: "orc"},	
 };
+
+var Monsters = [
+	{
+		limbs:[Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg], 
+		description: 'rat', 
+		species: 'rat', 
+		attack: 6, 
+		defense: 10, 
+		damage: 3, 
+		hp: 5
+	},
+	{
+		limbs:[Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg], 
+		description: 'dog', 
+		species: 'dog', 
+		attack: 15, 
+		defense: 20, 
+		damage: 6, 
+		hp: 10
+	},
+	{
+		limbs:[Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg], 
+		description: 'wolf', 
+		species: 'wolf', 
+		attack: 15, 
+		defense: 25, 
+		damage: 8, 
+		hp: 15
+	},
+	{
+		limbs:[Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg], 
+		description: 'bear', 
+		species: 'bear', 
+		attack: 20, 
+		defense: 50, 
+		damage: 15, 
+		hp: 30
+	},
+	{
+		limbs:[Limbs.goblinDaggerArm, [Limbs.goblinArm, Limbs.goblinBucklerArm], Limbs.goblinLeg, Limbs.goblinLeg], 
+		description: 'goblin', 
+		species: 'goblin', 
+		attack: 0, 
+		defense: 40, 
+		damage: 3, 
+		hp: 20
+	},
+	{
+		limbs:[Limbs.koboldDaggerArm, Limbs.koboldArm, Limbs.koboldLeg, Limbs.koboldLeg], 
+		description: 'kobold', 
+		species: 'kobold', 
+		attack: 0, 
+		defense: 30, 
+		damage: 4, 
+		hp: 16
+	},
+	{
+		limbs:[[Limbs.orcHammerArm, Limbs.orcAxeArm], Limbs.orcArm, Limbs.orcLeg, Limbs.orcLeg], 
+		description: 'orc', 
+		species: 'orc', 
+		attack: 0, 
+		defense: 45, 
+		damage: 3, 
+		hp: 30
+	},
+	{
+		limbs:[Limbs.trollClubArm, Limbs.trollArm, Limbs.trollLeg, Limbs.trollLeg], 
+		description: 'troll', 
+		species: 'troll', 
+		attack: 10, 
+		defense: 30, 
+		damage: 4, 
+		hp: 40
+	},
+];
 
 var StaticItem = function(description, character, color){
 	Item.call(this);
