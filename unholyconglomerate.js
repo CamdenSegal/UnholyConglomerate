@@ -191,7 +191,7 @@ var Game = {
 				case ROT.VK_NUMPAD8:
 				case ROT.VK_UP:
 				case ROT.VK_K:
-					if(curChoice-1 > 0){
+					if(curChoice-1 >= 0){
 						window.removeEventListener('keydown',promptHandler);
 						Game.prompt(options,curChoice-1,callback,title);
 					}
@@ -222,8 +222,8 @@ var Game = {
 		if(this.messages.length > this.displayHeight/3)
 			this.messages.shift();
 		this.redraw();
-		if(message.length > this.displayWidth-1)
-			this.addMessage(message.slice(this.displayWidth-1));
+		if(message.length > this.displayWidth)
+			this.addMessage('');
 	},
 
 	//Clear all messages
@@ -428,6 +428,9 @@ var States = {
 
 		path.shift();
 
+		if(path.length == 0)
+			return States.randomWalk(actor);
+
 		x = path[0][0] - actor.getX();
 		y = path[0][1] - actor.getY();
 
@@ -515,6 +518,7 @@ var LimbedCreature = function(x,y,params){
 	this._maxLimbs = 4; // Maximum number of limbs allowed
 	this._limbs = []; // Array of attached limbs
 	this._description = "abomination";
+	this._species = "none";
 
 	//Base torso stats
 	this._attack = 0;
@@ -530,6 +534,8 @@ var LimbedCreature = function(x,y,params){
 	for(var param in params){
 		this['_'+param] = params[param];
 	}
+
+	this._character = this._description[0];
 };
 LimbedCreature.prototype = new Actor();
 //Act!
@@ -631,22 +637,30 @@ LimbedCreature.prototype.applyDamage = function(damage){
 		this._hp -= damage;
 		if(this._hp <= 0){
 			//Creature dies
-			Game.addMessage('the '+this._description+ " has died");
-
-			//TODO: drop items
-			this.getTile().items.push(new StaticItem(this._description+" corpse"));
-
-			this.getTile().unit = null;
-			Game.engine.removeActor(this);
-			Game.redraw();
+			this._kill();
 		}
 	}
 };
+//Kill the creature drop it's items
+LimbedCreature.prototype._kill = function(){
+	Game.addMessage('the '+this._description+ " has died");
+
+	//TODO: drop items
+	this.getTile().items.push(new StaticItem(this._description+" corpse"));
+
+	this.getTile().unit = null;
+	Game.engine.removeActor(this);
+	Game.redraw();
+}
 //Return a human readable description including descriptions of all limbs.
 LimbedCreature.prototype.describe = function(){
 	var result = "A "+this._description+". It has "+this._limbs.length+" limbs. ";
 	for(var i = 0; i < this._limbs.length; i++){
-		result += "It has a "+this._limbs[i].description+". ";
+		if(this._limbs[i].species == this._species){
+			result += "It has a "+this._limbs[i].description+". ";
+		}else{
+			result += "It has a "+this._limbs[i].describe()+". ";
+		}
 	}
 	return result;
 };
@@ -667,6 +681,7 @@ var Player = function(x,y) {
 	this._character = '@';
 	this._color = [100,255,100];
 	this._description = "hero";
+	this._species = 'human';
 
 	//Add Human Legs
 	this.addLimb(new Limb(Limbs.humanLeg));
@@ -695,7 +710,7 @@ Player.prototype.move = function(x,y){
 	//Check if there are items on the tile
 	if(tile.items.length > 0){
 		for(var i = 0; i < tile.items.length;i++){
-			Game.addMessage('there is a '+tile.items[i].description+' here.');
+			Game.addMessage('there is a '+tile.items[i].describe()+' here.');
 		}
 	}
 	return true;
@@ -772,6 +787,10 @@ Player.prototype.handleEvent = function(e){
 			//Look around
 			Game.addMessage(this.describe());
 			break;
+		case ROT.VK_D:
+			//Dismember self!
+			this.applyDamage(this.damageRoll());
+			return true;
 		default:
 			return false; // No action mapped to event.
 	}
@@ -815,7 +834,7 @@ Player.prototype.pickup = function(){
 		window.removeEventListener("keydown",this);
 		var descriptions = [];
 		for(var i = 0; i < items.length; i++){
-			descriptions.push(items[i].description);
+			descriptions.push(items[i].describe());
 		}
 		descriptions.push("Cancel");
 		var callback = function(chosen){
@@ -850,6 +869,10 @@ Player.prototype.pickup = function(){
 		Game.prompt(descriptions,0,callback.bind(this),"PICKUP:");
 	}
 };
+Player.prototype._kill = function(){
+	LimbedCreature.prototype._kill.call(this);
+	Game.engine.lock();
+}
 
 // Item root class
 var Item = function(){
@@ -864,6 +887,9 @@ Item.prototype.draw = function(x,y,brightness){
 Item.prototype.pickup = function(){
 	return true;
 };
+Item.prototype.describe = function(){
+	return this.description;
+}
 
 // Limb class
 var Limb = function(params){
@@ -875,6 +901,7 @@ var Limb = function(params){
 	this.hp = 8;
 	this._character = '/';
 	this.description = "non-descript appendage";
+	this.species = "unusual";
 	//Apply custom params
 	for(var param in params){
 		this[param] = params[param];
@@ -882,21 +909,46 @@ var Limb = function(params){
 	this.hpBase = this.hp;
 };
 Limb.prototype = new Item();
+Limb.prototype.describe = function(){
+	return this.species + " "+this.description;
+}
 
 //List of predefined limbs
 var Limbs = {
 	// Human Limbs
-	humanArm: {attack:10,damage:5, description: "human arm"},
-	humanSwordArm: {attack:20,damage:10,defense:20, description: "human arm holding a sword"},
-	humanLeg: {speed:50,hp:15, description: "human leg"},
+	humanArm: {attack:10,damage:5, description: "arm", species: "human"},
+	humanSwordArm: {attack:20,damage:10,defense:20, description: "arm holding a sword", species: "human"},
+	humanShieldArm: {attack:5,damage:2,defense:60, description: "arm holding a shield", species: "human"},
+	humanLeg: {speed:50,hp:15, description: "leg", species: "human"},
 
 	// Rodent Limbs
-	ratLeg: {attack:2, damage: 1, speed: 20, hp: 3, description: "rat leg"},
+	ratLeg: {attack:2, damage: 1, speed: 20, hp: 3, description: "leg", species: "rat"},
+
+	// Beast Limbs
+	dogLeg: {attack: 2, damage: 3, speed: 70, hp: 5, description: "leg", species: "dog"},
+	wolfLeg: {attack: 4, damage: 4, speed: 80, hp: 6, description: "leg", species: "wolf"},
+	bearLeg: {attack: 14, damage: 9, speed: 40, hp: 12, description: "leg", species: "bear"},
 
 	// Small Monster Limbs
-	goblinArm: {attack: 7, damage: 5, defense: 10, description: "goblin arm"},
-	goblinDaggerArm: {attack: 14, damage: 7, defense: 15, description: "goblin arm holding a dagger"},
-	goblinLeg: {speed: 40, hp: 13, description: "goblin leg"}
+	goblinArm: {attack: 7, damage: 5, defense: 10, description: "arm", species: "goblin"},
+	goblinDaggerArm: {attack: 14, damage: 7, defense: 15, description: "arm holding a dagger", species: "goblin"},
+	goblinBucklerArm: {attack: 4, damage: 2, defense: 40, description: "arm holding a buckler", species: "goblin"},
+	goblinLeg: {speed: 40, hp: 13, description: "leg", species: "goblin"},
+
+	koboldArm: {attack: 5, damage: 4, defense: 7, description: "arm", species: "kobold"},
+	koboldDaggerArm: {attack: 12, damage: 6, defense: 13, description: "arm holding a dagger", species: "kobold"},
+	koboldLeg: {speed: 60, hp: 10, description: "leg", species: "kobold"},
+
+	// Medium Monster Limbs
+	orcArm: {attack: 10, damage: 7, hp: 10,description: "arm", species: "orc"},
+	orcHammerArm: {attack: 13, damage: 15,hp: 10, description: "arm holding a hammer", species: "orc"},
+	orcAxeArm: {attack: 18, damage: 12, defense: 13, hp: 10,description: "arm holding an axe", species: "orc"},
+	orcLeg: {speed:40,hp:20, description: "leg", species: "orc"},
+
+	// Large Monster Limbs
+	trollArm: {attack: 13, damage: 11, hp: 15,description: "arm", species: "troll"},
+	trollClubArm: {attack: 18, damage: 20,hp: 15, description: "arm holding a club", species: "troll"},
+	trollLeg: {speed:20,hp:30, description: "leg", species: "orc"},	
 };
 
 var StaticItem = function(description, character, color){
