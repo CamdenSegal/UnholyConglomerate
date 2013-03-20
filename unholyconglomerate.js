@@ -7,10 +7,12 @@
 var Game = {
 	display: null,
 	map: {},
+	levelSeeds: [],
 	player: null,
 	messages: [],
 	displayHeight: 30,
 	displayWidth: 80,
+	curLevel: 0,
 
 	init: function() {
 		//Setup display
@@ -25,6 +27,7 @@ var Game = {
 		this.engine = new ROT.Engine();
 
 		//Generate and draw the map
+		this.levelSeeds.push(ROT.RNG.getState());
 		this._generateMap();
 		this.redraw();
 
@@ -34,6 +37,7 @@ var Game = {
 
 	//Used to populate the map with tiles
 	_generateMap: function() {
+		this.map = {};
 		var digger = new ROT.Map.Digger();
 
 		var digCallback = function(x,y,value){
@@ -57,12 +61,31 @@ var Game = {
 		//Create the player
 		this.player = this._createActor(Player);
 
+		if(this.curLevel != 0){
+			//Add up stairs at player
+			this.map[this.player.getX()][this.player.getY()].structure = null;
+		}
+
 		this._generateMonster(20);
 		this._generateMonster(20);
 		this._generateMonster(20);
 		this._generateMonster(20);
 		this._generateMonster(20);
 		this._generateMonster(20);
+	},
+
+	_loadLevel: function(levelNum){
+		ROT.RNG.setState(this.levelSeeds[levelNum]);
+		this._generateMap();
+		this.curLevel = levelNum;
+		this.redraw();
+	},
+
+	_nextLevel: function(seed) {
+		this.levelSeeds.push(ROT.RNG.getState());
+		this.curLevel++;
+		this._generateMap();
+		this.redraw();
 	},
 
 	_getEmptyTiles: function(){
@@ -296,6 +319,7 @@ var FloorTile = function(params){
 	this.description = "open floor";
 	this.items = [];
 	this.unit = null;
+	this.structure = null;
 
 	//Apply customs params
 	for(var param in params){
@@ -950,9 +974,9 @@ var Limbs = {
 	ratLeg: {attack:2, damage: 1, speed: 20, hp: 3, description: "leg", species: "rat"},
 
 	// Beast Limbs
-	dogLeg: {attack: 2, damage: 3, speed: 60, hp: 5, description: "leg", species: "dog"},
-	wolfLeg: {attack: 2, damage: 4, speed: 65, hp: 6, description: "leg", species: "wolf"},
-	bearLeg: {attack: 14, damage: 12, speed: 40, hp: 12, description: "leg", species: "bear"},
+	dogLeg: {attack: 2, damage: 3, speed: 40, hp: 5, description: "leg", species: "dog"},
+	wolfLeg: {attack: 2, damage: 4, speed: 50, hp: 6, description: "leg", species: "wolf"},
+	bearLeg: {attack: 14, damage: 12, speed: 20, hp: 12, description: "leg", species: "bear"},
 
 	// Small Monster Limbs
 	goblinArm: {attack: 7, damage: 5, defense: 10, description: "arm", species: "goblin"},
