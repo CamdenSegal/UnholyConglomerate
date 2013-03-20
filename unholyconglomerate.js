@@ -38,6 +38,7 @@ var Game = {
 	//Used to populate the map with tiles
 	_generateMap: function() {
 		this.map = {};
+		this.engine.clear();
 		var digger = new ROT.Map.Digger();
 
 		var digCallback = function(x,y,value){
@@ -59,19 +60,34 @@ var Game = {
 		digger.create(digCallback.bind(this));
 
 		//Create the player
-		this.player = this._createActor(Player);
+		if(!this.player){
+			this.player = this._createActor(Player);
+		}else{
+			this._placeActor(this.player);
+		}
 
 		if(this.curLevel != 0){
 			//Add up stairs at player
-			this.map[this.player.getX()][this.player.getY()].structure = null;
+			this.map[this.player.getX()][this.player.getY()].structure = new Structure("up stairs", "^", [100,100,255], function(){
+				Game.prevLevel();
+			});
 		}
 
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
-		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		var emptyTiles = Game._getEmptyTiles();
+		var index = Math.floor(ROT.RNG.getUniform() * emptyTiles.length);
+		var parts = emptyTiles[index].split(',');
+		x = parseInt(parts[0],10);
+		y = parseInt(parts[1],10);
+		this.map[x][y].structure = new Structure("down stairs","v",[100,100,255], function(){
+			Game.nextLevel();
+		});
+
+		var numMonsters = Math.floor(ROT.RNG.getNormal(8,4));
+		if(numMonsters < 4)
+			numMonsters = 4;
+		for(var i = 0; i < numMonsters; i++){
+			this._generateMonster();
+		}
 	},
 
 	_loadLevel: function(levelNum){
@@ -98,7 +114,7 @@ var Game = {
 		for(var x in this.map){
 			for(var y in this.map[x]){
 				tile = this.map[x][y];
-				if(tile.walkable && !tile.unit && tile.items.length === 0){
+				if(tile.walkable && !tile.unit && tile.items.length === 0 && !tile.structure){
 					emptyTiles.push(x+','+y);
 				}
 			}
@@ -152,9 +168,11 @@ var Game = {
 	},
 
 	_generateMonster: function(level, corruption){
-		var level = Math.floor(ROT.RNG.getNormal(level,1));
+		level = Math.floor(ROT.RNG.getNormal((level ? level : this.curLevel),1));
 		if(level < 0)
-			level = 0;
+			level = 0; 
+
+		corruption = corruption ? corruption : (this.curLevel * 5) + 10;
 
 		var leveledMonsters = [];
 		for(var monster in Monsters){
@@ -848,10 +866,18 @@ Player.prototype.handleEvent = function(e){
 			this.pickup();
 			return;
 		case ROT.VK_PERIOD:
+		case 110:
 			Game.clearMessages();
+			if(e.shiftKey){
+				if(this.getTile().structure){
+					if(this.getTile().structure.character = "v")
+						Game.nextLevel();
+				}
+			}
 			//Wait 1 turn
 			break;
 		case ROT.VK_SLASH:
+		case 111:
 			Game.clearMessages();
 			//Look around
 			Game.addMessage(this.describe());
