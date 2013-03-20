@@ -66,12 +66,12 @@ var Game = {
 			this.map[this.player.getX()][this.player.getY()].structure = null;
 		}
 
-		this._generateMonster(20);
-		this._generateMonster(20);
-		this._generateMonster(20);
-		this._generateMonster(20);
-		this._generateMonster(20);
-		this._generateMonster(20);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
+		this._generateMonster(this.curLevel, 5*this.curLevel + 5);
 	},
 
 	_loadLevel: function(levelNum){
@@ -81,7 +81,11 @@ var Game = {
 		this.redraw();
 	},
 
-	_nextLevel: function(seed) {
+	prevLevel: function(){
+		this._loadLevel(this.curLevel - 1);
+	},
+
+	nextLevel: function() {
 		this.levelSeeds.push(ROT.RNG.getState());
 		this.curLevel++;
 		this._generateMap();
@@ -147,8 +151,22 @@ var Game = {
 		return actor;
 	},
 
-	_generateMonster: function(corruption){
-		var monsterStats = Monsters[Math.floor(ROT.RNG.getUniform() * Monsters.length)];
+	_generateMonster: function(level, corruption){
+		var level = Math.floor(ROT.RNG.getNormal(level,1));
+		if(level < 0)
+			level = 0;
+
+		var leveledMonsters = [];
+		for(var monster in Monsters){
+			if(Monsters[monster].level == level)
+				leveledMonsters.push(Monsters[monster]);
+		}
+
+		if(leveledMonsters.length > 0){
+			var monsterStats = leveledMonsters[Math.floor(ROT.RNG.getUniform() * leveledMonsters.length)];
+		}else{
+			var monsterStats = Monsters[Math.floor(ROT.RNG.getUniform() * Monsters.length)];
+		}
 		
 		//Pull out limb stats and dont pass to constructor
 		var limbs = monsterStats.limbs;
@@ -332,6 +350,8 @@ FloorTile.prototype.draw = function(x,y,brightness){
 		this.unit.draw(brightness);
 	}else if(this.items.length > 0){
 		this.items[0].draw(x,y,brightness);
+	}else if(this.structure){
+		this.structure.draw(x,y,brightness);
 	}else{
 		Tile.prototype.draw.call(this,x,y,brightness);
 	}
@@ -471,7 +491,7 @@ var States = {
 			path.push([x,y]);
 		};
 
-		var astar = new ROT.Path.AStar(x,y, passableCallback, {topology:4});
+		var astar = new ROT.Path.AStar(x,y, passableCallback, {topology:8});
 		astar.compute(actor.getX(), actor.getY(), pathCallback);
 
 		path.shift();
@@ -1008,7 +1028,8 @@ var Monsters = [
 		attack: 6, 
 		defense: 10, 
 		damage: 3, 
-		hp: 5
+		hp: 5,
+		level: 0
 	},
 	{
 		limbs:[Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg], 
@@ -1017,7 +1038,8 @@ var Monsters = [
 		attack: 15, 
 		defense: 20, 
 		damage: 6, 
-		hp: 10
+		hp: 10,
+		level: 1
 	},
 	{
 		limbs:[Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg], 
@@ -1026,7 +1048,8 @@ var Monsters = [
 		attack: 15, 
 		defense: 25, 
 		damage: 8, 
-		hp: 15
+		hp: 15,
+		level: 3
 	},
 	{
 		limbs:[Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg], 
@@ -1035,7 +1058,8 @@ var Monsters = [
 		attack: 20, 
 		defense: 50, 
 		damage: 15, 
-		hp: 30
+		hp: 30,
+		level: 3
 	},
 	{
 		limbs:[Limbs.goblinDaggerArm, [Limbs.goblinArm, Limbs.goblinBucklerArm], Limbs.goblinLeg, Limbs.goblinLeg], 
@@ -1044,7 +1068,8 @@ var Monsters = [
 		attack: 0, 
 		defense: 40, 
 		damage: 3, 
-		hp: 20
+		hp: 20,
+		level: 2
 	},
 	{
 		limbs:[Limbs.koboldDaggerArm, Limbs.koboldArm, Limbs.koboldLeg, Limbs.koboldLeg], 
@@ -1053,7 +1078,8 @@ var Monsters = [
 		attack: 0, 
 		defense: 30, 
 		damage: 4, 
-		hp: 16
+		hp: 16,
+		level: 1
 	},
 	{
 		limbs:[[Limbs.orcHammerArm, Limbs.orcAxeArm], Limbs.orcArm, Limbs.orcLeg, Limbs.orcLeg], 
@@ -1062,7 +1088,8 @@ var Monsters = [
 		attack: 0, 
 		defense: 45, 
 		damage: 3, 
-		hp: 30
+		hp: 30,
+		level: 3
 	},
 	{
 		limbs:[Limbs.trollClubArm, Limbs.trollArm, Limbs.trollLeg, Limbs.trollLeg], 
@@ -1071,7 +1098,8 @@ var Monsters = [
 		attack: 10, 
 		defense: 30, 
 		damage: 4, 
-		hp: 40
+		hp: 40,
+		level: 4
 	},
 ];
 
@@ -1083,4 +1111,16 @@ var StaticItem = function(description, character, color){
 };
 StaticItem.prototype = new Item();
 StaticItem.prototype.pickup = function(){ return false; };
+
+
+var Structure = function(description, character, color, use){
+	this._character = character ? character : '?';
+	this._color = color ? color : [255,100,255];
+	this.description = description;
+	this.use = use;
+};
+Structure.prototype.draw = function(x,y,brightness){
+	Game.display.draw(x, y,this._character,
+		ROT.Color.toHex(ROT.Color.interpolate(this._color,[0,0,0],brightness)));
+};
 
