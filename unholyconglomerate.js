@@ -66,7 +66,7 @@ var Game = {
 			this._placeActor(this.player);
 		}
 
-		if(this.curLevel != 0){
+		if(this.curLevel !== 0){
 			//Add up stairs at player
 			this.map[this.player.getX()][this.player.getY()].structure = new Structure("up stairs", "^", [100,100,255], function(){
 				Game.prevLevel();
@@ -170,28 +170,29 @@ var Game = {
 	_generateMonster: function(level, corruption){
 		level = Math.floor(ROT.RNG.getNormal((level ? level : this.curLevel),1));
 		if(level < 0)
-			level = 0; 
+			level = 0;
 
 		corruption = corruption ? corruption : (this.curLevel * 5) + 10;
 
 		var leveledMonsters = [];
-		for(var monster in Monsters){
+		var monster;
+		for(monster in Monsters){
 			if(Monsters[monster].level == level)
 				leveledMonsters.push(Monsters[monster]);
 		}
-
+		var monsterStats;
 		if(leveledMonsters.length > 0){
-			var monsterStats = leveledMonsters[Math.floor(ROT.RNG.getUniform() * leveledMonsters.length)];
+			monsterStats = leveledMonsters[Math.floor(ROT.RNG.getUniform() * leveledMonsters.length)];
 		}else{
-			var monsterStats = Monsters[Math.floor(ROT.RNG.getUniform() * Monsters.length)];
+			monsterStats = Monsters[Math.floor(ROT.RNG.getUniform() * Monsters.length)];
 		}
-		
+
 		//Pull out limb stats and dont pass to constructor
 		var limbs = monsterStats.limbs;
 		monsterStats.limbs = [];
-		
+
 		//Create the monster
-		var monster = new LimbedCreature(0,0,monsterStats);
+		monster = new LimbedCreature(0,0,monsterStats);
 
 		for(var i = 0; i < limbs.length; i++){
 			var limb = limbs[i];
@@ -236,7 +237,7 @@ var Game = {
 		var fov = new ROT.FOV.PreciseShadowcasting(this._lightPasses.bind(this));
 
 		var seen = false;
-		
+
 		var fovCallback = function(x,y,d,visibility){
 			//Draw the tile with brightness based on distance from player
 			if(this.map[x][y].unit == this.player){
@@ -246,7 +247,7 @@ var Game = {
 
 		//Run the FOV Calculations
 		fov.compute(x,y,r,fovCallback.bind(this));
-		
+
 		return seen;
 	},
 
@@ -439,12 +440,12 @@ Actor.prototype.getTile = function(){
 	return Game.map[this._x][this._y];
 };
 //Position Getters and Setter
-Actor.prototype.getX = function(){ return this._x;}
-Actor.prototype.getY = function(){ return this._y;}
+Actor.prototype.getX = function(){ return this._x;};
+Actor.prototype.getY = function(){ return this._y;};
 Actor.prototype.setPos = function(x,y){
-	this._x = x; 
+	this._x = x;
 	this._y = y;
-}
+};
 //Attempt to move actor in desired direction
 Actor.prototype.move = function(x,y,noAttack){
 	//Get new position
@@ -514,7 +515,7 @@ var States = {
 
 		path.shift();
 
-		if(path.length == 0)
+		if(path.length === 0)
 			return States.randomWalk(actor);
 
 		x = path[0][0] - actor.getX();
@@ -583,7 +584,7 @@ var Sight = function(distance){
 Sight.prototype = new Sense();
 Sight.prototype.look = function(x,y){
 	//Look for the player
-	var tSeen = Game.playerVisible(x,y,this.viewRange)
+	var tSeen = Game.playerVisible(x,y,this.viewRange);
 
 	//If the player is seen remember where and when
 	if(tSeen){
@@ -611,7 +612,7 @@ var LimbedCreature = function(x,y,params){
 	this._defense = 40;
 	this._damage = 3;
 	this._hp = 20;
-	
+
 
 	//AI!
 	this._brain = new Brain(States.randomWalk, States.chase, new Sight(10));
@@ -698,10 +699,10 @@ LimbedCreature.prototype.doAttack = function(defender){
 	}
 };
 //Apply damage to creature
-LimbedCreature.prototype.applyDamage = function(damage){
+LimbedCreature.prototype.applyDamage = function(damage, limbIndex, dontRollover){
 	if(this._limbs.length > 0){
-		//Choose a limb to damage randomly
-		var limbIndex = Math.floor(ROT.RNG.getUniform() * this._limbs.length);
+		if(!limbIndex)//Choose a limb to damage randomly if no limb specified
+			limbIndex = Math.floor(ROT.RNG.getUniform() * this._limbs.length);
 		var limb = this._limbs[limbIndex];
 
 		if(limb.hp > damage){
@@ -715,8 +716,8 @@ LimbedCreature.prototype.applyDamage = function(damage){
 			Game.addMessage('the '+this._description+"'s "+limb.description+" is lopped off!");
 			//Remove limb
 			this.removeLimb(limbIndex);
-			//Rollover remaining damage
-			this.applyDamage(damage);
+			if(!dontRollover)//Rollover remaining damage
+				this.applyDamage(damage);
 		}
 	}else{
 		//No limbs! Damage the torso
@@ -738,7 +739,7 @@ LimbedCreature.prototype._kill = function(){
 	this.getTile().unit = null;
 	Game.engine.removeActor(this);
 	Game.redraw();
-}
+};
 //Return a human readable description including descriptions of all limbs.
 LimbedCreature.prototype.describe = function(){
 	var result = "A "+this._description+". It has "+this._limbs.length+" limbs. ";
@@ -870,7 +871,7 @@ Player.prototype.handleEvent = function(e){
 			Game.clearMessages();
 			if(e.shiftKey){
 				if(this.getTile().structure){
-					if(this.getTile().structure.character = "v")
+					if(this.getTile().structure)
 						Game.nextLevel();
 				}
 			}
@@ -884,8 +885,28 @@ Player.prototype.handleEvent = function(e){
 			break;
 		case ROT.VK_D:
 			//Dismember self!
-			this.applyDamage(this.damageRoll());
-			return true;
+
+			//Build a list of current limbs
+			var limbs = [];
+			for(var i = 0; i < this._limbs.length; i++)
+				limbs.push(this._limbs[i].describe());
+			limbs.push("Cancel");
+
+			window.removeEventListener("keydown", this);
+
+			var callback = function(chosen){
+				//Cancel if cancel chosen
+				if(chosen >= this._limbs.length){
+					window.addEventListener("keydown",this);
+					return false;
+				}
+
+				this.applyDamage(this.damageRoll, chosen, true);
+				this.endTurn();
+			};
+
+			Game.prompt(limbs,0,callback.bind(this),"AMPUTATE:");
+			return;
 		default:
 			return false; // No action mapped to event.
 	}
@@ -967,7 +988,7 @@ Player.prototype.pickup = function(){
 Player.prototype._kill = function(){
 	LimbedCreature.prototype._kill.call(this);
 	Game.engine.lock();
-}
+};
 
 // Item root class
 var Item = function(){
@@ -984,7 +1005,7 @@ Item.prototype.pickup = function(){
 };
 Item.prototype.describe = function(){
 	return this.description;
-}
+};
 
 // Limb class
 var Limb = function(params){
@@ -1006,7 +1027,7 @@ var Limb = function(params){
 Limb.prototype = new Item();
 Limb.prototype.describe = function(){
 	return this.species + " "+this.description;
-}
+};
 
 //List of predefined limbs
 var Limbs = {
@@ -1043,90 +1064,90 @@ var Limbs = {
 	// Large Monster Limbs
 	trollArm: {attack: 13, damage: 11, hp: 15,description: "arm", species: "troll"},
 	trollClubArm: {attack: 18, damage: 20,hp: 15, description: "arm holding a club", species: "troll"},
-	trollLeg: {speed:20,hp:30, description: "leg", species: "orc"},	
+	trollLeg: {speed:20,hp:30, description: "leg", species: "orc"}
 };
 
 var Monsters = [
 	{
-		limbs:[Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg], 
-		description: 'rat', 
-		species: 'rat', 
-		attack: 6, 
-		defense: 10, 
-		damage: 3, 
+		limbs:[Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg, Limbs.ratLeg],
+		description: 'rat',
+		species: 'rat',
+		attack: 6,
+		defense: 10,
+		damage: 3,
 		hp: 5,
 		level: 0
 	},
 	{
-		limbs:[Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg], 
-		description: 'dog', 
-		species: 'dog', 
-		attack: 15, 
-		defense: 20, 
-		damage: 6, 
+		limbs:[Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg, Limbs.dogLeg],
+		description: 'dog',
+		species: 'dog',
+		attack: 15,
+		defense: 20,
+		damage: 6,
 		hp: 10,
 		level: 1
 	},
 	{
-		limbs:[Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg], 
-		description: 'wolf', 
-		species: 'wolf', 
-		attack: 15, 
-		defense: 25, 
-		damage: 8, 
+		limbs:[Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg, Limbs.wolfLeg],
+		description: 'wolf',
+		species: 'wolf',
+		attack: 15,
+		defense: 25,
+		damage: 8,
 		hp: 15,
 		level: 3
 	},
 	{
-		limbs:[Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg], 
-		description: 'bear', 
-		species: 'bear', 
-		attack: 20, 
-		defense: 50, 
-		damage: 15, 
+		limbs:[Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg, Limbs.bearLeg],
+		description: 'bear',
+		species: 'bear',
+		attack: 20,
+		defense: 50,
+		damage: 15,
 		hp: 30,
 		level: 3
 	},
 	{
-		limbs:[Limbs.goblinDaggerArm, [Limbs.goblinArm, Limbs.goblinBucklerArm], Limbs.goblinLeg, Limbs.goblinLeg], 
-		description: 'goblin', 
-		species: 'goblin', 
-		attack: 0, 
-		defense: 40, 
-		damage: 3, 
+		limbs:[Limbs.goblinDaggerArm, [Limbs.goblinArm, Limbs.goblinBucklerArm], Limbs.goblinLeg, Limbs.goblinLeg],
+		description: 'goblin',
+		species: 'goblin',
+		attack: 0,
+		defense: 40,
+		damage: 3,
 		hp: 20,
 		level: 2
 	},
 	{
-		limbs:[Limbs.koboldDaggerArm, Limbs.koboldArm, Limbs.koboldLeg, Limbs.koboldLeg], 
-		description: 'kobold', 
-		species: 'kobold', 
-		attack: 0, 
-		defense: 30, 
-		damage: 4, 
+		limbs:[Limbs.koboldDaggerArm, Limbs.koboldArm, Limbs.koboldLeg, Limbs.koboldLeg],
+		description: 'kobold',
+		species: 'kobold',
+		attack: 0,
+		defense: 30,
+		damage: 4,
 		hp: 16,
 		level: 1
 	},
 	{
-		limbs:[[Limbs.orcHammerArm, Limbs.orcAxeArm], Limbs.orcArm, Limbs.orcLeg, Limbs.orcLeg], 
-		description: 'orc', 
-		species: 'orc', 
-		attack: 0, 
-		defense: 45, 
-		damage: 3, 
+		limbs:[[Limbs.orcHammerArm, Limbs.orcAxeArm], Limbs.orcArm, Limbs.orcLeg, Limbs.orcLeg],
+		description: 'orc',
+		species: 'orc',
+		attack: 0,
+		defense: 45,
+		damage: 3,
 		hp: 30,
 		level: 3
 	},
 	{
-		limbs:[Limbs.trollClubArm, Limbs.trollArm, Limbs.trollLeg, Limbs.trollLeg], 
-		description: 'troll', 
-		species: 'troll', 
-		attack: 10, 
-		defense: 30, 
-		damage: 4, 
+		limbs:[Limbs.trollClubArm, Limbs.trollArm, Limbs.trollLeg, Limbs.trollLeg],
+		description: 'troll',
+		species: 'troll',
+		attack: 10,
+		defense: 30,
+		damage: 4,
 		hp: 40,
 		level: 4
-	},
+	}
 ];
 
 var StaticItem = function(description, character, color){
